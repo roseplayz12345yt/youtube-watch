@@ -5,6 +5,17 @@ const DRIVE_FOLDER = "RoseTube Cloud";
 const DRIVE_FILE = "accounts-vault.json";
 const KDF_ITERS = 150000;
 
+const FEATURED_TWITCH = [
+  { channel: "xqc", title: "xQc" },
+  { channel: "kai_cenat", title: "Kai Cenat" },
+  { channel: "shroud", title: "shroud" },
+  { channel: "pokimane", title: "pokimane" },
+  { channel: "lol", title: "League of Legends" },
+  { channel: "valorant", title: "VALORANT" },
+  { channel: "eslcs", title: "ESL CS" },
+  { channel: "twitch", title: "Twitch" },
+];
+
 const INVIDIOUS_INSTANCES = [
   "https://invidious.f5.si",
   "https://inv.nadeko.net",
@@ -52,11 +63,14 @@ const els = {
   clientIdInput: document.getElementById("google-client-id"),
   settingsClientId: document.getElementById("settings-client-id"),
   settingsDriveStatus: document.getElementById("settings-drive-status"),
+  twitchChat: document.getElementById("twitch-chat"),
+  relatedHeading: document.getElementById("related-heading"),
 };
 
 let currentUser = null;
 let currentVideo = null;
 let sessionPassword = "";
+let mediaSource = "youtube";
 let drive = { token: "", email: "", folderId: "", fileId: "", vault: null };
 
 function toast(msg) {
@@ -352,17 +366,268 @@ function formatCount(n) {
   return `${num} views`;
 }
 
+function mediaKey(item) {
+  if (item.source === "twitch") return item.videoId;
+  return `yt:${item.videoId}`;
+}
+
+function twitchParents() {
+  const host = location.hostname || "localhost";
+  return [...new Set([host, "roseplayz12345yt.github.io", "localhost", "127.0.0.1"])];
+}
+
+function twitchParentQuery() {
+  return twitchParents().map((p) => `parent=${encodeURIComponent(p)}`).join("&");
+}
+
+const TWITCH_GQL_CLIENT = "kimne78kx3ncx6brgo4mv6wki5h1ko";
+
+function twitchThumb(channel) {
+  return `https://static-cdn.jtvnw.net/previews-ttv/live_user_${channel}-440x248.jpg?t=${Date.now()}`;
+}
+
+function formatViewers(n) {
+  const num = Number(n || 0);
+  if (num >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M watching`;
+  if (num >= 1_000) return `${(num / 1_000).toFixed(1)}K watching`;
+  return `${num} watching`;
+}
+
+function twitchItem({ channel, title, kind = "channel", vodId, clipId, live, viewers, game, description, thumbnail, author }) {
+  const login = String(channel || "").replace(/^#/, "").toLowerCase();
+  if (kind === "video" && vodId) {
+    return {
+      source: "twitch",
+      kind: "video",
+      channel: login,
+      videoId: `twitchvod:${vodId}`,
+      vodId,
+      title: title || `Twitch VOD ${vodId}`,
+      author: author || login,
+      thumbnail: thumbnail || twitchThumb(login),
+      description,
+    };
+  }
+  if (kind === "clip" && clipId) {
+    return {
+      source: "twitch",
+      kind: "clip",
+      channel: login,
+      videoId: `twitchclip:${clipId}`,
+      clipId,
+      title: title || clipId,
+      author: author || login,
+      thumbnail: thumbnail || twitchThumb(login),
+      description,
+    };
+  }
+  return {
+    source: "twitch",
+    kind: "channel",
+    channel: login,
+    videoId: `twitch:${login}`,
+    title: title || login,
+    author: author || login,
+    thumbnail: thumbnail || twitchThumb(login),
+    publishedText: live ? formatViewers(viewers) : "Offline channel",
+    live: !!live,
+    viewers: viewers || 0,
+    game: game || "",
+    description: description || "",
+  };
+}
+
+async function twitchGql(query, variables = {}) {
+  const res = await fetch("https://gql.twitch.tv/gql", {
+    method: "POST",
+    headers: {
+      "Client-ID": TWITCH_GQL_CLIENT,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ query, variables }),
+  });
+  if (!res.ok) throw new Error(`Twitch lookup failed (${res.status})`);
+  const data = await res.json();
+  if (data.errors?.length) throw new Error(data.errors[0].message || "Twitch lookup failed");
+  return data.data || {};
+}
+
+function itemFromGqlUser(user) {
+  if (!user?.login) return null;
+  const live = !!user.stream;
+  return twitchItem({
+    channel: user.login,
+    title: live ? (user.stream.title || user.displayName) : user.displayName || user.login,
+    author: user.displayName || user.login,
+    live,
+    viewers: user.stream?.viewersCount,
+    game: user.stream?.game?.name,
+    description: user.description || "",
+    thumbnail: user.stream?.previewImageURL || twitchThumb(user.login),
+  });
+}
+
+function parseTwitchInput(raw) {
+  const q = (raw || "").trim();
+  if (!q) return null;
+  try {
+    const url = new URL(q.startsWith("http") ? q : `https://${q}`);
+    if (url.hostname.includes("clips.twitch.tv")) {
+      const clipId = url.pathname.split("/").filter(Boolean)[0];
+      if (clipId) return twitchItem({ channel: clipId, clipId, kind: "clip", title: clipId });
+    }
+    if (url.hostname.includes("twitch.tv")) {
+      const parts = url.pathname.split("/").filter(Boolean);
+      if (parts[0] === "videos" && parts[1]) {
+        return twitchItem({ channel: "twitch", vodId: parts[1].replace(/^v/, ""), kind: "video" });
+      }
+      if (parts[1] === "videos" && parts[2] && /^\d+$/.test(parts[2].replace(/^v/, ""))) {
+        return twitchItem({ channel: parts[0], vodId: parts[2].replace(/^v/, ""), kind: "video" });
+      }
+      if (parts[1] === "clip" && parts[2]) {
+        return twitchItem({ channel: parts[0], clipId: parts[2], kind: "clip", title: parts[2] });
+      }
+      if (parts[0] && !["directory", "downloads", "p", "search", "settings"].includes(parts[0])) {
+        return twitchItem({ channel: parts[0], title: parts[0] });
+      }
+    }
+  } catch {
+    /* not a url */
+  }
+  const login = q.replace(/^@/, "").replace(/^#/, "").trim().toLowerCase();
+  if (/^[a-z0-9_]{3,25}$/.test(login)) return twitchItem({ channel: login, title: login });
+  return null;
+}
+
+async function fetchLiveStreams(limit = 24) {
+  try {
+    const data = await twitchGql(`query ($n: Int!) {
+      streams(first: $n) {
+        edges {
+          node {
+            title
+            viewersCount
+            previewImageURL(width: 440, height: 248)
+            broadcaster { login displayName description }
+            game { name }
+          }
+        }
+      }
+    }`, { n: limit });
+    return (data.streams?.edges || []).map((edge) => {
+      const node = edge.node;
+      if (!node?.broadcaster?.login) return null;
+      return twitchItem({
+        channel: node.broadcaster.login,
+        title: node.title || node.broadcaster.displayName,
+        author: node.broadcaster.displayName || node.broadcaster.login,
+        live: true,
+        viewers: node.viewersCount,
+        game: node.game?.name,
+        description: node.broadcaster.description || "",
+        thumbnail: node.previewImageURL,
+      });
+    }).filter(Boolean);
+  } catch (err) {
+    console.warn("Live directory failed", err);
+    return FEATURED_TWITCH.map((row) => twitchItem({ channel: row.channel, title: row.title }));
+  }
+}
+
+async function hydrateTwitchChannel(item) {
+  if (!item || item.kind !== "channel" || !item.channel) return item;
+  try {
+    const data = await twitchGql(`query ($login: String!) {
+      user(login: $login) {
+        login
+        displayName
+        description
+        stream {
+          title
+          viewersCount
+          previewImageURL(width: 440, height: 248)
+          game { name }
+        }
+      }
+    }`, { login: item.channel });
+    return itemFromGqlUser(data.user) || item;
+  } catch {
+    return item;
+  }
+}
+
+async function searchTwitch(query) {
+  const q = (query || "").trim();
+  const parsed = parseTwitchInput(q);
+  if (parsed && parsed.kind !== "channel") return [parsed];
+  if (!q) return fetchLiveStreams(24);
+
+  const results = [];
+  const seen = new Set();
+  const push = (item) => {
+    if (!item) return;
+    const key = mediaKey(item);
+    if (seen.has(key)) return;
+    seen.add(key);
+    results.push(item);
+  };
+
+  if (parsed) push(await hydrateTwitchChannel(parsed));
+
+  try {
+    const data = await twitchGql(`query ($q: String!) {
+      searchFor(userQuery: $q, platform: "web") {
+        channels {
+          items {
+            login
+            displayName
+            description
+            stream {
+              title
+              viewersCount
+              previewImageURL(width: 440, height: 248)
+              game { name }
+            }
+          }
+        }
+      }
+    }`, { q });
+    (data.searchFor?.channels?.items || []).forEach((user) => push(itemFromGqlUser(user)));
+  } catch (err) {
+    console.warn("Twitch search failed", err);
+  }
+
+  const needle = q.toLowerCase();
+  FEATURED_TWITCH.forEach((row) => {
+    if (row.channel.includes(needle) || row.title.toLowerCase().includes(needle)) {
+      push(twitchItem({ channel: row.channel, title: row.title }));
+    }
+  });
+
+  results.sort((a, b) => Number(!!b.live) - Number(!!a.live) || (b.viewers || 0) - (a.viewers || 0));
+  return results;
+}
+
 function videoCard(video) {
   const el = document.createElement("article");
   el.className = "card";
-  const thumb = video.thumbnail || `https://i.ytimg.com/vi/${video.videoId}/hqdefault.jpg`;
+  const thumb = video.thumbnail || (video.source === "twitch"
+    ? twitchThumb(video.channel)
+    : `https://i.ytimg.com/vi/${video.videoId}/hqdefault.jpg`);
+  const badge = video.source === "twitch"
+    ? (video.live
+      ? `<span class="duration live-badge">LIVE</span>`
+      : `<span class="duration">${video.kind === "clip" ? "CLIP" : video.kind === "video" ? "VOD" : "TWITCH"}</span>`)
+    : (video.lengthSeconds ? `<span class="duration">${formatDuration(video.lengthSeconds)}</span>` : "");
   el.innerHTML = `
-    <div class="thumb" style="background-image:url('${thumb}')">
-      ${video.lengthSeconds ? `<span class="duration">${formatDuration(video.lengthSeconds)}</span>` : ""}
-    </div>
+    <div class="thumb" style="background-image:url('${thumb}')">${badge}</div>
     <div class="card-body"><h3></h3><p></p></div>`;
   el.querySelector("h3").textContent = video.title || "Untitled";
-  el.querySelector("p").textContent = [video.author, video.viewCount != null ? formatCount(video.viewCount) : ""].filter(Boolean).join(" • ");
+  el.querySelector("p").textContent = [
+    video.source === "twitch" ? (video.game || video.author || "Twitch") : video.author,
+    video.source === "twitch" && video.live ? formatViewers(video.viewers)
+      : video.viewCount != null ? formatCount(video.viewCount) : video.publishedText || "",
+  ].filter(Boolean).join(" • ");
   el.addEventListener("click", () => watchVideo(video));
   return el;
 }
@@ -450,45 +715,111 @@ async function getVideoDetails(videoId) {
   return null;
 }
 
+function setTwitchChat(channel) {
+  if (!els.twitchChat) return;
+  if (!channel) {
+    els.twitchChat.classList.add("hidden");
+    els.twitchChat.src = "";
+    return;
+  }
+  els.twitchChat.src = `https://www.twitch.tv/embed/${encodeURIComponent(channel)}/chat?${twitchParentQuery()}&darkpopout`;
+  els.twitchChat.classList.remove("hidden");
+}
+
 async function watchVideo(video) {
   currentVideo = video;
   showView("watch");
   els.watchTitle.textContent = video.title || "Watch";
-  els.watchAuthor.textContent = video.author || "";
+  els.watchAuthor.textContent = video.author || video.channel || "";
   els.watchStats.textContent = [video.viewCount != null ? formatCount(video.viewCount) : "", video.publishedText || ""].filter(Boolean).join(" • ");
-  els.watchDesc.textContent = video.description || "Loading description…";
-  els.player.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(video.videoId)}?autoplay=1&rel=0`;
-  els.openYt.href = `https://www.youtube.com/watch?v=${encodeURIComponent(video.videoId)}`;
+  els.related.innerHTML = "";
   updateSaveButton();
+
+  if (video.source === "twitch") {
+    const pq = twitchParentQuery();
+    if (video.kind === "video" && video.vodId) {
+      els.player.src = `https://player.twitch.tv/?video=${encodeURIComponent(video.vodId)}&${pq}&autoplay=true&muted=false`;
+      setTwitchChat(video.channel || "");
+    } else if (video.kind === "clip" && video.clipId) {
+      els.player.src = `https://clips.twitch.tv/embed?clip=${encodeURIComponent(video.clipId)}&${pq}&autoplay=true&muted=false`;
+      setTwitchChat("");
+    } else {
+      els.player.src = `https://player.twitch.tv/?channel=${encodeURIComponent(video.channel)}&${pq}&autoplay=true&muted=false`;
+      setTwitchChat(video.channel);
+    }
+    els.openYt.href = video.kind === "video"
+      ? `https://www.twitch.tv/videos/${encodeURIComponent(video.vodId)}`
+      : video.kind === "clip"
+        ? `https://clips.twitch.tv/${encodeURIComponent(video.clipId)}`
+        : `https://www.twitch.tv/${encodeURIComponent(video.channel)}`;
+    els.openYt.textContent = "Open on Twitch";
+    const status = video.kind === "channel"
+      ? (video.live ? `${formatViewers(video.viewers)}${video.game ? ` · ${video.game}` : ""}` : "Channel may be offline — the player will show the last broadcast if available.")
+      : "";
+    els.watchStats.textContent = status;
+    els.watchDesc.textContent = video.description || "Twitch live player with chat. Click another channel on the right to switch streams.";
+    if (els.relatedHeading) els.relatedHeading.textContent = "More live streams";
+    const related = (await fetchLiveStreams(12)).filter((row) => row.channel !== video.channel).slice(0, 8);
+    related.forEach((item) => {
+      const el = document.createElement("div");
+      el.className = "related-item";
+      el.innerHTML = `<div class="thumb" style="background-image:url('${item.thumbnail}')"></div><div><h4></h4><p></p></div>`;
+      el.querySelector("h4").textContent = item.title;
+      el.querySelector("p").textContent = item.live ? formatViewers(item.viewers) : "Twitch";
+      el.addEventListener("click", () => watchVideo(item));
+      els.related.appendChild(el);
+    });
+    if (video.kind === "channel") {
+      const hydrated = await hydrateTwitchChannel(video);
+      if (hydrated && currentVideo && currentVideo.videoId === video.videoId) {
+        currentVideo = hydrated;
+        els.watchTitle.textContent = hydrated.title || video.title;
+        els.watchAuthor.textContent = hydrated.author || video.author || "";
+        els.watchStats.textContent = hydrated.live
+          ? `${formatViewers(hydrated.viewers)}${hydrated.game ? ` · ${hydrated.game}` : ""}`
+          : "Offline right now — open the player anyway, or try another live channel.";
+        if (hydrated.description) els.watchDesc.textContent = hydrated.description;
+        updateSaveButton();
+      }
+    }
+  } else {
+    setTwitchChat("");
+    els.player.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(video.videoId)}?autoplay=1&rel=0`;
+    els.openYt.href = `https://www.youtube.com/watch?v=${encodeURIComponent(video.videoId)}`;
+    els.openYt.textContent = "Open on YouTube";
+    els.watchDesc.textContent = video.description || "Loading description…";
+    if (els.relatedHeading) els.relatedHeading.textContent = "Up next";
+    const details = await getVideoDetails(video.videoId);
+    if (details) {
+      currentVideo = { ...video, ...details };
+      els.watchTitle.textContent = details.title || video.title;
+      els.watchAuthor.textContent = details.author || video.author || "";
+      els.watchStats.textContent = [details.viewCount != null ? formatCount(details.viewCount) : "", details.publishedText || ""].filter(Boolean).join(" • ");
+      els.watchDesc.textContent = details.description || "No description.";
+      (details.related || []).slice(0, 12).forEach((item) => {
+        const row = document.createElement("div");
+        row.className = "related-item";
+        row.innerHTML = `<div class="thumb" style="background-image:url('${item.thumbnail}')"></div><div><h4></h4><p></p></div>`;
+        row.querySelector("h4").textContent = item.title;
+        row.querySelector("p").textContent = item.author || "";
+        row.addEventListener("click", () => watchVideo(item));
+        els.related.appendChild(row);
+      });
+      updateSaveButton();
+    } else if (!video.description) {
+      els.watchDesc.textContent = "No description available.";
+    }
+  }
+
   const data = loadData();
-  const history = (data.history || []).filter((v) => v.videoId !== video.videoId);
+  const key = mediaKey(video);
+  const history = (data.history || []).filter((v) => mediaKey(v) !== key);
   history.unshift({ ...video, watchedAt: Date.now() });
   await saveData({ history: history.slice(0, 80) });
-  const details = await getVideoDetails(video.videoId);
-  if (details) {
-    currentVideo = { ...video, ...details };
-    els.watchTitle.textContent = details.title || video.title;
-    els.watchAuthor.textContent = details.author || video.author || "";
-    els.watchStats.textContent = [details.viewCount != null ? formatCount(details.viewCount) : "", details.publishedText || ""].filter(Boolean).join(" • ");
-    els.watchDesc.textContent = details.description || "No description.";
-    els.related.innerHTML = "";
-    (details.related || []).slice(0, 12).forEach((item) => {
-      const row = document.createElement("div");
-      row.className = "related-item";
-      row.innerHTML = `<div class="thumb" style="background-image:url('${item.thumbnail}')"></div><div><h4></h4><p></p></div>`;
-      row.querySelector("h4").textContent = item.title;
-      row.querySelector("p").textContent = item.author || "";
-      row.addEventListener("click", () => watchVideo(item));
-      els.related.appendChild(row);
-    });
-    updateSaveButton();
-  } else if (!video.description) {
-    els.watchDesc.textContent = "No description available.";
-  }
 }
 
 function isSaved(videoId) {
-  return (loadData().saved || []).some((v) => v.videoId === videoId);
+  return (loadData().saved || []).some((v) => v.videoId === videoId || mediaKey(v) === videoId);
 }
 
 function updateSaveButton() {
@@ -517,11 +848,21 @@ function enterApp(user) {
   renderHome();
 }
 
-function renderHome() {
+async function renderHome() {
   showView("home");
+  if (mediaSource === "twitch") {
+    els.greeting.textContent = "Live on Twitch";
+    els.homeRail.innerHTML = `<p class="empty">Loading live streams…</p>`;
+    const live = await fetchLiveStreams(24);
+    renderGrid(els.homeRail, live, "No live streams found right now. Search a channel name above.");
+    return;
+  }
+  if (currentUser) {
+    els.greeting.textContent = `Welcome back, ${currentUser.displayName || currentUser.username}`;
+  }
   const history = loadData().history || [];
   if (!history.length) {
-    els.homeRail.innerHTML = `<p class="empty">Search above to start watching. Your history will show up here.</p>`;
+    els.homeRail.innerHTML = `<p class="empty">Search YouTube or switch to Twitch to watch live streams.</p>`;
     return;
   }
   renderGrid(els.homeRail, history.slice(0, 12), "");
@@ -529,16 +870,19 @@ function renderHome() {
 
 async function runSearch(query) {
   showView("results");
-  els.resultsTitle.textContent = `Results for “${query}”`;
+  els.resultsTitle.textContent = mediaSource === "twitch" ? `Twitch · “${query}”` : `Results for “${query}”`;
   els.resultsMeta.textContent = "Searching…";
-  els.resultsGrid.innerHTML = `<p class="empty">Looking across YouTube mirrors…</p>`;
+  els.resultsGrid.innerHTML = `<p class="empty">${mediaSource === "twitch" ? "Looking up Twitch channels…" : "Looking across YouTube mirrors…"}</p>`;
   try {
-    const videos = await searchVideos(query);
-    els.resultsMeta.textContent = `${videos.length} videos`;
-    renderGrid(els.resultsGrid, videos, "No videos found.");
+    const videos = mediaSource === "twitch" ? await searchTwitch(query) : await searchVideos(query);
+    const liveCount = videos.filter((v) => v.live).length;
+    els.resultsMeta.textContent = mediaSource === "twitch"
+      ? `${videos.length} channels${liveCount ? ` · ${liveCount} live` : ""}`
+      : `${videos.length} videos`;
+    renderGrid(els.resultsGrid, videos, "No results found.");
   } catch (err) {
     els.resultsMeta.textContent = "";
-    els.resultsGrid.innerHTML = `<p class="empty">${err.message} Add a YouTube API key in Settings if this keeps happening.</p>`;
+    els.resultsGrid.innerHTML = `<p class="empty">${err.message}</p>`;
   }
 }
 
@@ -608,6 +952,18 @@ els.registerForm.addEventListener("submit", async (e) => {
     enterApp(user);
     toast(drive.token ? "Account encrypted and saved to Google Drive" : "Account created on this device. Connect Drive to use it elsewhere.");
   } catch (err) { showAuthError(err.message); }
+});
+
+document.querySelectorAll(".source-btn").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".source-btn").forEach((b) => b.classList.remove("active"));
+    btn.classList.add("active");
+    mediaSource = btn.dataset.source;
+    els.searchInput.placeholder = mediaSource === "twitch"
+      ? "Channel, live search, or twitch.tv link"
+      : "Search YouTube";
+    if (!els.homeView.classList.contains("hidden")) renderHome();
+  });
 });
 
 els.searchForm.addEventListener("submit", (e) => {
