@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RoseTube — Search &amp; Watch</title>
+  <meta name="description" content="Sign in to search and watch YouTube videos." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23c41e3a'/%3E%3Cpolygon points='24,16 50,32 24,48' fill='white'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="auth-screen" class="auth-screen">
+    <div class="auth-card">
+      <div class="brand">
+        <span class="logo-mark">▶</span>
+        <div>
+          <h1>RoseTube</h1>
+          <p>Search and watch YouTube after you sign in.</p>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active" data-tab="login" type="button">Sign in</button>
+        <button class="tab" data-tab="register" type="button">Create account</button>
+      </div>
+
+      <form id="login-form" class="auth-form">
+        <label>
+          Username
+          <input id="login-user" name="username" autocomplete="username" required minlength="3" maxlength="24" />
+        </label>
+        <label>
+          Password
+          <input id="login-pass" name="password" type="password" autocomplete="current-password" required minlength="4" />
+        </label>
+        <label class="remember">
+          <input id="login-remember" type="checkbox" checked />
+          Stay signed in on this device
+        </label>
+        <button class="primary" type="submit">Sign in</button>
+      </form>
+
+      <form id="register-form" class="auth-form hidden">
+        <label>
+          Username
+          <input id="reg-user" name="username" autocomplete="username" required minlength="3" maxlength="24" pattern="[A-Za-z0-9_]+" />
+        </label>
+        <label>
+          Display name
+          <input id="reg-display" name="display" autocomplete="nickname" maxlength="32" placeholder="Optional" />
+        </label>
+        <label>
+          Password
+          <input id="reg-pass" name="password" type="password" autocomplete="new-password" required minlength="4" />
+        </label>
+        <label>
+          Confirm password
+          <input id="reg-pass2" name="password2" type="password" autocomplete="new-password" required minlength="4" />
+        </label>
+        <button class="primary" type="submit">Create account</button>
+      </form>
+
+      <p id="auth-error" class="error" hidden></p>
+      <p class="fine-print">Accounts live only in this browser. Nothing is sent to a server.</p>
+    </div>
+  </div>
+
+  <div id="app" class="app hidden">
+    <header class="topbar">
+      <button class="brand-btn" id="home-btn" type="button" title="Home">
+        <span class="logo-mark">▶</span>
+        <span>RoseTube</span>
+      </button>
+      <form id="search-form" class="search-form">
+        <input id="search-input" type="search" placeholder="Search YouTube" required />
+        <button type="submit" aria-label="Search">Search</button>
+      </form>
+      <nav class="top-nav">
+        <button class="ghost" id="history-btn" type="button">History</button>
+        <button class="ghost" id="saved-btn" type="button">Saved</button>
+        <button class="ghost" id="settings-btn" type="button">Settings</button>
+        <div class="user-chip">
+          <span id="user-avatar">R</span>
+          <span id="user-label">User</span>
+          <button class="ghost tiny" id="logout-btn" type="button">Sign out</button>
+        </div>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section id="home-view" class="view">
+        <div class="hero">
+          <h2 id="greeting">Welcome back</h2>
+          <p>Search any topic, channel, or video title. Click a result to watch it here.</p>
+        </div>
+        <div id="home-rail" class="grid"></div>
+      </section>
+
+      <section id="results-view" class="view hidden">
+        <div class="section-head">
+          <h2 id="results-title">Results</h2>
+          <p id="results-meta"></p>
+        </div>
+        <div id="results-grid" class="grid"></div>
+      </section>
+
+      <section id="watch-view" class="view hidden">
+        <div class="watch-layout">
+          <div class="player-col">
+            <div class="player-wrap">
+              <iframe id="player" title="YouTube player" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
+            </div>
+            <h2 id="watch-title"></h2>
+            <div class="watch-meta">
+              <span id="watch-author"></span>
+              <span id="watch-stats"></span>
+            </div>
+            <div class="watch-actions">
+              <button id="save-btn" class="ghost" type="button">Save</button>
+              <a id="open-yt" class="ghost linkish" href="#" target="_blank" rel="noopener">Open on YouTube</a>
+            </div>
+            <p id="watch-desc" class="watch-desc"></p>
+          </div>
+          <aside>
+            <h3>Up next</h3>
+            <div id="related-list" class="related"></div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="list-view" class="view hidden">
+        <div class="section-head">
+          <h2 id="list-title">Library</h2>
+        </div>
+        <div id="list-grid" class="grid"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="settings-modal" class="modal hidden" role="dialog" aria-modal="true">
+    <div class="modal-card">
+      <h2>Settings</h2>
+      <p>Search works through public Invidious instances. If those are down, paste your own YouTube Data API v3 key.</p>
+      <label>
+        YouTube API key (optional)
+        <input id="api-key-input" type="password" autocomplete="off" placeholder="AIza..." />
+      </label>
+      <p class="fine-print">Stored only in this browser. Get a key from Google Cloud → YouTube Data API v3.</p>
+      <div class="modal-actions">
+        <button id="save-settings" class="primary" type="button">Save</button>
+        <button id="close-settings" class="ghost" type="button">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast hidden"></div>
+  <script src="app.js"></script>
+</body>
+</html>
