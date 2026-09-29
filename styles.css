@@ -229,6 +229,13 @@ main { padding: 28px 24px 80px; max-width: 1280px; margin: 0 auto; }
   border-radius: 6px;
   font-size: 12px;
 }
+.live-badge {
+  left: 8px;
+  right: auto;
+  background: #eb0400;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
 .card-body { padding: 12px 14px 16px; }
 .card-body h3 {
   margin: 0 0 6px;
