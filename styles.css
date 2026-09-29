@@ -309,3 +309,30 @@ main { padding: 28px 24px 80px; max-width: 1280px; margin: 0 auto; }
   .watch-layout { grid-template-columns: 1fr; }
   .related-item { grid-template-columns: 120px 1fr; }
 }
+
+.drive-box {
+  margin: 18px 0 8px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #101218;
+}
+.drive-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+.drive-status { color: var(--muted); font-size: 13px; }
+.drive-status.on { color: var(--ok); }
+.drive-box p { margin: 8px 0 12px; color: var(--muted); font-size: 13px; }
+.drive-btn {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: #111;
+  border-radius: 12px;
+  padding: 11px 14px;
+  font-weight: 600;
+}
+.client-id-label { margin-top: 12px; }
