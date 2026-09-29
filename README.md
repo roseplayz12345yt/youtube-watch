@@ -1,37 +1,49 @@
 # RoseTube
 
-A signed-in YouTube search and watch site for GitHub Pages.
+A signed-in YouTube search and watch site. Encrypted accounts sync through **your Google Drive**, so the same username and password work on another phone or computer.
 
-Create an account in the browser, search videos, and play them with the official YouTube embed player. Watch history and saved videos stay on the device that signed in.
-
-## Live site
-
-After GitHub Pages is on:
+Live site (after GitHub Pages is on):
 
 https://roseplayz12345yt.github.io/youtube-watch/
 
+Owner Drive folder:
+
+https://drive.google.com/drive/folders/1AmCZxyFJjbiFZMBhokKvHzcjIRCb3e8f
+
 ## Enable GitHub Pages
 
-1. Open the repo **Settings → Pages**.
-2. Under **Build and deployment**, set **Source** to **Deploy from a branch**.
-3. Branch: `main`, folder: `/ (root)`.
-4. Save. The site is usually live within a minute.
+1. Repo **Settings → Pages**
+2. Source: **Deploy from a branch**
+3. Branch: `main`, folder: `/ (root)`
 
-Or set Source to **GitHub Actions** if you want the workflow in `.github/workflows/pages.yml` to publish it.
+## Turn on Google Drive sync
 
-## How search works
+Google requires an OAuth client ID for the website to write to Drive.
 
-- Default: public [Invidious](https://docs.invidious.io/api/) instances (no API key).
-- Optional: paste a [YouTube Data API v3](https://console.cloud.google.com/apis/library/youtube.googleapis.com) key in **Settings**. The key never leaves this browser.
+1. Open [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+2. Create a project (or pick one)
+3. Enable **Google Drive API**
+4. Create credentials → **OAuth client ID** → Application type **Web application**
+5. Authorized JavaScript origins:
+   - `https://roseplayz12345yt.github.io`
+   - `http://localhost:5500` if you test locally
+6. Copy the client ID (`….apps.googleusercontent.com`)
+7. Paste it into RoseTube → **Connect Google Drive**
+8. Approve Drive access
 
-Playback uses `youtube-nocookie.com/embed`, which is YouTube’s official embed player.
+The site creates a `RoseTube Cloud/accounts-vault.json` file in that Google account.
 
-## Accounts
+## How logins are stored
 
-Sign-in is local only (`localStorage`). There is no server database. Accounts do not sync across phones or browsers.
+- Password is never uploaded as text
+- The browser derives a key with PBKDF2 and encrypts the account with AES-GCM
+- Only the encrypted blob is written to Drive
+- History and saved videos ride along in that same encrypted vault
+
+On another device: connect the **same Google account**, then sign in with the same RoseTube username and password.
 
 ## Files
 
 - `index.html` — layout
 - `styles.css` — dark UI
-- `app.js` — auth, search, player, library
+- `app.js` — auth, Drive vault, search, player
