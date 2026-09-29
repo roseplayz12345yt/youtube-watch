@@ -1,6 +1,8 @@
 # RoseTube
 
-A signed-in YouTube search and watch site. Encrypted accounts sync through **your Google Drive**, so the same username and password work on another phone or computer.
+A signed-in YouTube + Twitch watch site. Encrypted accounts sync through **your Google Drive**, so the same username and password work on another phone or computer.
+
+Switch the search bar to **Twitch** to open live streams, VODs, and clips with chat. Paste a channel name or a `twitch.tv` link.
 
 Live site (after GitHub Pages is on):
 
