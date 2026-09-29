@@ -89,10 +89,13 @@
         <span>RoseTube</span>
       </button>
       <form id="search-form" class="search-form">
-        <div class="source-toggle" role="group" aria-label="Source">
-          <button type="button" class="source-btn active" data-source="youtube">YouTube</button>
-          <button type="button" class="source-btn" data-source="twitch">Twitch</button>
-        </div>
+        <label class="source-toggle" for="source-select">
+          <span class="sr-only">Source</span>
+          <select id="source-select" aria-label="Watch source">
+            <option value="youtube" selected>YouTube</option>
+            <option value="twitch">Twitch</option>
+          </select>
+        </label>
         <input id="search-input" type="search" placeholder="Search YouTube" required />
         <button type="submit" aria-label="Search">Search</button>
       </form>
