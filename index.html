@@ -3,13 +3,14 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>RoseTube — Search &amp; Watch</title>
+  <title>RoseTube — Search & Watch</title>
   <meta name="description" content="Sign in to search and watch YouTube videos." />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23c41e3a'/%3E%3Cpolygon points='24,16 50,32 24,48' fill='white'/%3E%3C/svg%3E" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="styles.css" />
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
   <div id="auth-screen" class="auth-screen">
@@ -20,6 +21,19 @@
           <h1>RoseTube</h1>
           <p>Search and watch YouTube after you sign in.</p>
         </div>
+      </div>
+
+      <div id="drive-box" class="drive-box">
+        <div class="drive-row">
+          <strong>Google Drive</strong>
+          <span id="drive-status" class="drive-status">Not connected</span>
+        </div>
+        <p>Connect Drive so the same encrypted login works on your phone and computer.</p>
+        <button id="drive-connect-btn" class="drive-btn" type="button">Connect Google Drive</button>
+        <label class="client-id-label">
+          Google OAuth client ID
+          <input id="google-client-id" placeholder="123-abc.apps.googleusercontent.com" autocomplete="off" />
+        </label>
       </div>
 
       <div class="tabs">
@@ -64,7 +78,7 @@
       </form>
 
       <p id="auth-error" class="error" hidden></p>
-      <p class="fine-print">Accounts live only in this browser. Nothing is sent to a server.</p>
+      <p class="fine-print">Passwords are encrypted in the browser with AES-GCM before they are saved to Google Drive. Plain passwords are never uploaded.</p>
     </div>
   </div>
 
@@ -148,9 +162,14 @@
         YouTube API key (optional)
         <input id="api-key-input" type="password" autocomplete="off" placeholder="AIza..." />
       </label>
-      <p class="fine-print">Stored only in this browser. Get a key from Google Cloud → YouTube Data API v3.</p>
+      <label>
+        Google OAuth client ID
+        <input id="settings-client-id" placeholder="123-abc.apps.googleusercontent.com" autocomplete="off" />
+      </label>
+      <p id="settings-drive-status" class="fine-print">Drive: not connected</p>
       <div class="modal-actions">
         <button id="save-settings" class="primary" type="button">Save</button>
+        <button id="reconnect-drive" class="ghost" type="button">Reconnect Drive</button>
         <button id="close-settings" class="ghost" type="button">Close</button>
       </div>
     </div>
